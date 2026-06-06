@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const toLocalTime = (utcDateStr: string, timeZone: string): string => {
+  try {
+    const date = new Date(utcDateStr);
+    return new Intl.DateTimeFormat("es-AR", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(date);
+  } catch {
+    return utcDateStr;
+  }
+}
+
 interface ChatRequest {
   message: string;
 }
@@ -92,7 +110,7 @@ serve(async (req) => {
     // Obtener los 10 gastos más recientes
     const { data: recentExp, error: recentError } = await supabaseClient
       .from('gastos')
-      .select('monto, categoria, descripcion, fecha')
+      .select('id, monto, categoria, descripcion, fecha')
       .order('fecha', { ascending: false })
       .limit(10);
     if (!recentError && recentExp) {
@@ -131,15 +149,50 @@ serve(async (req) => {
       }
     }
 
+    const timeZone = Deno.env.get("USER_TIMEZONE") || "America/Argentina/Buenos_Aires";
+    const currentLocalTime = new Intl.DateTimeFormat("es-AR", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(new Date());
+
+    const formattedRecentExpenses = recentExpenses.map(e => ({
+      id: e.id,
+      monto: e.monto,
+      categoria: e.categoria,
+      descripcion: e.descripcion,
+      fecha_local: toLocalTime(e.fecha, timeZone)
+    }));
+
+    const formattedSemanticExpenses = semanticExpenses.map(e => ({
+      id: e.id,
+      monto: e.monto,
+      categoria: e.categoria,
+      descripcion: e.descripcion,
+      fecha_local: toLocalTime(e.fecha, timeZone)
+    }));
+
     // 3. Diseñar el System Prompt con el contexto recuperado
     const systemInstruction = `Actúas como un asesor financiero personal experto e inteligente. Tu objetivo es ayudar al usuario a gestionar sus finanzas, responder preguntas sobre sus gastos, registrar transacciones o promociones, sugerir el mejor método de pago basándote en beneficios vigentes y realizar un seguimiento de su cartera de inversiones.
 
+Contexto geográfico y de moneda:
+- El usuario reside en Argentina.
+- Todas las monedas y montos especificados en los gastos, presupuestos, límites, topes y promociones (incluyendo el campo 'tope_reintegro') están expresados en Pesos Argentinos (ARS o $).
+- Al responder sobre montos o límites, debes referirte a ellos explícitamente en "pesos" o "pesos argentinos" (nunca en dólares, a menos que el activo sea explícitamente una criptomoneda o moneda extranjera como USD).
+
+La fecha y hora actual local del usuario es: ${currentLocalTime} (Zona horaria: ${timeZone}).
+
 Aquí tienes el contexto de los datos del usuario:
 [GASTOS RECIENTES (Últimos 10)]
-${JSON.stringify(recentExpenses, null, 2)}
+${JSON.stringify(formattedRecentExpenses, null, 2)}
 
 [GASTOS HISTÓRICOS SIMILARES (Búsqueda Semántica)]
-${JSON.stringify(semanticExpenses, null, 2)}
+${JSON.stringify(formattedSemanticExpenses, null, 2)}
 
 [PROMOCIONES RELEVANTES DISPONIBLES (Búsqueda Semántica)]
 ${JSON.stringify(semanticPromotions, null, 2)}
@@ -154,7 +207,8 @@ Reglas de respuesta:
 4. Si te piden guardar o registrar un gasto (ej. "registra un gasto de 500 pesos en café"), usa la herramienta "insert_expense".
 5. Si el usuario pregunta sobre sus inversiones, patrimonio o qué activos posee, analiza la sección [POSICIONES DE INVERSIÓN ACTUALES] y haz resúmenes descriptivos de sus tenencias (ej. "Tienes 0.5 BTC en Lemon Cash y 1000 AL30 en Balanz").
 6. No menciones explícitamente términos técnicos como "contexto", "búsqueda semántica", "RAG", "JSON" o "herramientas". Habla de forma natural sobre "sus gastos registrados", "sus inversiones" y "promociones vigentes".
-7. Usa formato Markdown limpio (negritas, viñetas, tablas sencillas si corresponde) optimizado para pantallas de móviles.`;
+7. Si el usuario te pide eliminar, borrar o cancelar un gasto (por ejemplo, "borrar el gasto de hoy", "elimina el café", "borra el último gasto"), busca el ID (UUID) de ese gasto en la lista de [GASTOS RECIENTES] o [GASTOS HISTÓRICOS SIMILARES] y llama de inmediato a la herramienta "delete_expense" con el 'expense_id' correspondiente. No respondas con texto descriptivo del gasto sin borrarlo ni pidas confirmación; invoca la herramienta directamente. Si no encuentras el gasto o hay ambigüedad (múltiples gastos similares), responde al usuario preguntando cuál de ellos desea eliminar, describiéndolos brevemente.
+8. Usa formato Markdown limpio (negritas, viñetas, tablas sencillas si corresponde) optimizado para pantallas de móviles.`;
 
     // 4. Enviar la consulta a Gemini 3.5 Flash con Declaración de Funciones (Tools)
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiApiKey}`;
@@ -198,6 +252,17 @@ Reglas de respuesta:
                   descripcion: { type: "STRING", description: "Detalles del gasto (ej. Coca cola, Almuerzo, Carga de nafta, Pago de luz)." }
                 },
                 required: ["monto", "categoria"]
+              }
+            },
+            {
+              name: "delete_expense",
+              description: "Elimina un gasto financiero específico registrado en la base de datos a partir de su ID (UUID).",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  expense_id: { type: "STRING", description: "El ID (UUID) del gasto que se desea eliminar." }
+                },
+                required: ["expense_id"]
               }
             }
           ]
@@ -310,6 +375,19 @@ Reglas de respuesta:
         }
 
         reply = `¡Gasto registrado con éxito!\n\n* **Monto:** $${monto}\n* **Categoría:** ${categoria}\n* **Detalle:** ${descripcion || 'Sin descripción'}`;
+      } else if (name === "delete_expense") {
+        const { expense_id } = args;
+
+        const { error: deleteError } = await supabaseClient
+          .from('gastos')
+          .delete()
+          .eq('id', expense_id);
+
+        if (deleteError) {
+          throw new Error(`Error al eliminar el gasto: ${deleteError.message}`);
+        }
+
+        reply = "¡Gasto eliminado de la base de datos con éxito!";
       }
     } else {
       reply = part?.text || "Lo siento, no pude procesar tu solicitud en este momento.";
