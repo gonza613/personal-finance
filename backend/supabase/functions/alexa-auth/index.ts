@@ -72,42 +72,81 @@ serve(async (req) => {
   if (req.method === 'POST' && path.endsWith('/token')) {
     try {
       const contentType = req.headers.get("content-type") || "";
+      let grantType = "";
       let code = "";
+      let refreshTokenParam = "";
       
       if (contentType.includes("application/x-www-form-urlencoded")) {
         const bodyText = await req.text();
         const params = new URLSearchParams(bodyText);
+        grantType = params.get("grant_type") || "";
         code = params.get("code") || "";
+        refreshTokenParam = params.get("refresh_token") || "";
       } else {
         const bodyJson = await req.json();
+        grantType = bodyJson.grant_type || "";
         code = bodyJson.code || "";
+        refreshTokenParam = bodyJson.refresh_token || "";
       }
 
-      if (!code) {
-        return new Response(JSON.stringify({ error: "invalid_request", error_description: "Missing code parameter" }), {
-          status: 400,
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+      if (grantType === "refresh_token") {
+        if (!refreshTokenParam) {
+          return new Response(JSON.stringify({ error: "invalid_request", error_description: "Missing refresh_token parameter" }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        console.log("Procesando refresh_token...");
+        const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshTokenParam });
+        
+        if (error || !data.session) {
+          throw new Error(error?.message || "No se pudo refrescar la sesión en Supabase.");
+        }
+
+        const tokenResponse = {
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+          token_type: "Bearer",
+          expires_in: 3600
+        };
+
+        console.log("Sesión refrescada con éxito en Supabase.");
+        return new Response(JSON.stringify(tokenResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+      } else {
+        // grant_type === "authorization_code" o por defecto
+        if (!code) {
+          return new Response(JSON.stringify({ error: "invalid_request", error_description: "Missing code parameter" }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        const decrypted = await decrypt(code);
+        const { accessToken, refreshToken } = JSON.parse(decrypted);
+
+        const tokenResponse = {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          token_type: "Bearer",
+          expires_in: 3600
+        };
+
+        return new Response(JSON.stringify(tokenResponse), {
+          status: 200,
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
-      const decrypted = await decrypt(code);
-      const { accessToken, refreshToken } = JSON.parse(decrypted);
-
-      const tokenResponse = {
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        token_type: "Bearer",
-        expires_in: 3600
-      };
-
-      return new Response(JSON.stringify(tokenResponse), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-    } catch (err) {
-      console.error("Error en intercambio de token:", err);
-      return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Invalid authorization code" }), {
+    } catch (err: any) {
+      console.error("Error en intercambio/refresco de token:", err);
+      return new Response(JSON.stringify({ error: "invalid_grant", error_description: err.message || "Invalid token request" }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
