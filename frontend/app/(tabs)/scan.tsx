@@ -89,39 +89,56 @@ export default function ScanScreen() {
     }
   };
 
+  const performDelete = async (id: string, supermarketName: string, totalAmount: number) => {
+    try {
+      // 1. Borrar en cascada por foreign key en Supabase
+      const { error } = await supabase.from('tickets').delete().eq('id', id);
+      if (error) throw error;
+
+      // 2. Borrar el gasto correspondiente en la tabla de gastos
+      const { error: gastoError } = await supabase
+        .from('gastos')
+        .delete()
+        .eq('descripcion', `Compra en ${supermarketName}`)
+        .eq('monto', totalAmount);
+
+      if (gastoError) console.log("Error deleting corresponding gasto:", gastoError);
+
+      fetchTickets();
+      if (Platform.OS === 'web') {
+        alert('El ticket y su gasto asociado han sido eliminados.');
+      } else {
+        Alert.alert('Eliminado', 'El ticket y su gasto asociado han sido eliminados.');
+      }
+    } catch (err: any) {
+      if (Platform.OS === 'web') {
+        alert(err.message || 'No se pudo eliminar el ticket.');
+      } else {
+        Alert.alert('Error', err.message || 'No se pudo eliminar el ticket.');
+      }
+    }
+  };
+
   const handleDeleteTicket = async (id: string, supermarketName: string, totalAmount: number, purchaseDate: string) => {
-    Alert.alert(
-      'Eliminar Ticket',
-      `¿Deseas eliminar el ticket de "${supermarketName}" y todos sus productos?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // 1. Borrar en cascada por foreign key en Supabase
-              const { error } = await supabase.from('tickets').delete().eq('id', id);
-              if (error) throw error;
-
-              // 2. Borrar el gasto correspondiente en la tabla de gastos
-              const { error: gastoError } = await supabase
-                .from('gastos')
-                .delete()
-                .eq('descripcion', `Compra en ${supermarketName}`)
-                .eq('monto', totalAmount);
-
-              if (gastoError) console.log("Error deleting corresponding gasto:", gastoError);
-
-              fetchTickets();
-              Alert.alert('Eliminado', 'El ticket y su gasto asociado han sido eliminados.');
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'No se pudo eliminar el ticket.');
-            }
+    if (Platform.OS === 'web') {
+      const confirmDelete = window.confirm(`¿Deseas eliminar el ticket de "${supermarketName}" y todos sus productos?`);
+      if (confirmDelete) {
+        await performDelete(id, supermarketName, totalAmount);
+      }
+    } else {
+      Alert.alert(
+        'Eliminar Ticket',
+        `¿Deseas eliminar el ticket de "${supermarketName}" y todos sus productos?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Eliminar',
+            style: 'destructive',
+            onPress: () => performDelete(id, supermarketName, totalAmount)
           }
-        }
-      ]
-    );
+        ]
+      );
+    }
   };
 
   // Compression helper
@@ -529,8 +546,8 @@ export default function ScanScreen() {
                     return (
                       <View key={ticket.id} style={styles.ticketCard}>
                         <View style={styles.ticketHeader}>
-                          <View>
-                            <Text style={styles.ticketStore}>{storeName}</Text>
+                          <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={styles.ticketStore} numberOfLines={1} ellipsizeMode="tail">{storeName}</Text>
                             <Text style={styles.ticketDate}>{formattedDate}</Text>
                           </View>
                           <View style={styles.ticketRight}>
