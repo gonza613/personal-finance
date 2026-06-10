@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build": "expo export --platform web && node -e \"const fs = require('fs'); if (fs.existsSync('vercel.json')) fs.copyFileSync('vercel.json', 'dist/vercel.json');\""
   },
   "dependencies": {
     "@expo/html-elements": "^0.8.0",
