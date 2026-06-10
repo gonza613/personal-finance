@@ -205,9 +205,11 @@ Reglas de respuesta cruciales (Brevidad absoluta):
 2. NUNCA agregues resúmenes de datos no solicitados. Por ejemplo, si te preguntan por gastos, no menciones promociones ni inversiones.
 3. NUNCA finalices con preguntas de seguimiento, frases de cortesía o sugerencias no solicitadas (ej. evita preguntar "¿Necesitás algo más?" o "¿Querés registrar otro gasto?"). Termina tu respuesta inmediatamente al contestar la duda.
 4. Si el usuario te pide eliminar, borrar o cancelar un gasto (por ejemplo, "borrar el gasto de hoy", "elimina el café", "borra el último gasto"), busca el ID (UUID) de ese gasto en la lista de [GASTOS RECIENTES] o [GASTOS HISTÓRICOS SIMILARES] y llama de inmediato a la herramienta "delete_expense" con el 'expense_id' correspondiente. No respondas con texto descriptivo del gasto sin borrarlo ni pidas confirmación. Si no encuentras el gasto o hay ambigüedad (múltiples gastos similares), responde al usuario preguntando cuál de ellos desea eliminar, describiéndolos brevemente.
-5. Si te piden registrar o guardar un gasto o promoción, llama a la herramienta adecuada de inmediato sin pedir confirmación.
-6. No menciones términos técnicos como "contexto", "búsqueda semántica", "RAG", "JSON" o "herramientas". Habla de forma natural sobre sus registros.
-7. Usa formato Markdown limpio (negritas, viñetas) optimizado para voz y pantallas móviles.`;
+5. Si el usuario te pide eliminar, borrar o cancelar una promoción (por ejemplo, "elimina la promo de Galicia", "borra la promoción de Santander de los lunes"), busca el ID (UUID) de esa promoción en la lista de [PROMOCIONES RELEVANTES DISPONIBLES] y llama de inmediato a la herramienta "delete_promotion" con el 'promotion_id' correspondiente. Si no encuentras la promoción o hay ambigüedad, responde al usuario preguntando cuál de ellas desea eliminar.
+6. Si el usuario te pide editar, actualizar o modificar una promoción (por ejemplo, "cambia la promo de Galicia al 35%", "modifica el reintegro de MODO"), busca el ID (UUID) de esa promoción en la lista de [PROMOCIONES RELEVANTES DISPONIBLES] y llama a la herramienta "update_promotion" especificando los parámetros que cambian.
+7. Si te piden registrar o guardar un gasto o promoción, llama a la herramienta adecuada de inmediato sin pedir confirmación.
+8. No menciones términos técnicos como "contexto", "búsqueda semántica", "RAG", "JSON" o "herramientas". Habla de forma natural sobre sus registros.
+9. Usa formato Markdown limpio (negritas, viñetas) optimizado para voz y pantallas móviles.`;
 
     // 4. Enviar la consulta a Gemini 3.5 Flash con Declaración de Funciones (Tools)
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiApiKey}`;
@@ -262,6 +264,32 @@ Reglas de respuesta cruciales (Brevidad absoluta):
                   expense_id: { type: "STRING", description: "El ID (UUID) del gasto que se desea eliminar." }
                 },
                 required: ["expense_id"]
+              }
+            },
+            {
+              name: "delete_promotion",
+              description: "Elimina una promoción o beneficio registrado a partir de su ID (UUID).",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  promotion_id: { type: "STRING", description: "El ID (UUID) de la promoción que se desea eliminar." }
+                },
+                required: ["promotion_id"]
+              }
+            },
+            {
+              name: "update_promotion",
+              description: "Modifica o actualiza los datos de una promoción existente a partir de su ID (UUID).",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  promotion_id: { type: "STRING", description: "El ID (UUID) de la promoción a modificar." },
+                  entidad: { type: "STRING", description: "Nuevo nombre de la entidad o banco si cambia, sino omitir." },
+                  descuento_porcentaje: { type: "NUMBER", description: "Nuevo porcentaje de descuento, sólo el número (ej: 30 para 30%) si cambia, sino omitir." },
+                  tope_reintegro: { type: "NUMBER", description: "Nuevo monto máximo de reintegro en pesos si cambia o null si no aplica, sino omitir." },
+                  dias_vigencia: { type: "STRING", description: "Nuevos días de vigencia o fecha si cambia, sino omitir." }
+                },
+                required: ["promotion_id"]
               }
             }
           ]
@@ -387,6 +415,80 @@ Reglas de respuesta cruciales (Brevidad absoluta):
         }
 
         reply = "¡Gasto eliminado de la base de datos con éxito!";
+      } else if (name === "delete_promotion") {
+        const { promotion_id } = args;
+
+        const { error: deleteError } = await supabaseClient
+          .from('promociones')
+          .delete()
+          .eq('id', promotion_id);
+
+        if (deleteError) {
+          throw new Error(`Error al eliminar la promoción: ${deleteError.message}`);
+        }
+
+        reply = "¡Promoción eliminada de la base de datos con éxito!";
+      } else if (name === "update_promotion") {
+        const { promotion_id, entidad, descuento_porcentaje, tope_reintegro, dias_vigencia } = args;
+
+        // 1. Obtener la promoción existente para tener los valores actuales
+        const { data: existingPromo, error: fetchError } = await supabaseClient
+          .from('promociones')
+          .select('*')
+          .eq('id', promotion_id)
+          .single();
+
+        if (fetchError || !existingPromo) {
+          throw new Error(`No se pudo encontrar la promoción a actualizar: ${fetchError?.message || 'No encontrada'}`);
+        }
+
+        // 2. Determinar valores finales (mezcla de actuales y actualizados)
+        const updatedEntidad = entidad !== undefined ? entidad : existingPromo.entidad;
+        const updatedDescuento = descuento_porcentaje !== undefined ? descuento_porcentaje : existingPromo.descuento_porcentaje;
+        const updatedTope = tope_reintegro !== undefined ? tope_reintegro : existingPromo.tope_reintegro;
+        const updatedDias = dias_vigencia !== undefined ? dias_vigencia : existingPromo.dias_vigencia;
+
+        // 3. Generar embedding si alguno de los campos de texto/número cambió
+        let promoEmbedding = existingPromo.embedding;
+        if (entidad !== undefined || descuento_porcentaje !== undefined || tope_reintegro !== undefined || dias_vigencia !== undefined) {
+          try {
+            const textToEmbed = `${updatedEntidad} ${updatedDescuento}% descuento ${updatedDias} ${updatedTope ? 'tope ' + updatedTope : ''}`;
+            const embedUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${geminiApiKey}`;
+            const embedResponse = await fetch(embedUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "models/gemini-embedding-2",
+                content: { parts: [{ text: textToEmbed }] },
+                outputDimensionality: 768
+              })
+            });
+            if (embedResponse.ok) {
+              const embedData = await embedResponse.json();
+              promoEmbedding = embedData.embedding.values;
+            }
+          } catch (err) {
+            console.error("Error generando embedding para la promoción modificada:", err);
+          }
+        }
+
+        // 4. Actualizar en la BD
+        const { error: updateError } = await supabaseClient
+          .from('promociones')
+          .update({
+            entidad: updatedEntidad,
+            descuento_porcentaje: Number(updatedDescuento),
+            tope_reintegro: updatedTope !== null && updatedTope !== undefined ? Number(updatedTope) : null,
+            dias_vigencia: updatedDias,
+            embedding: promoEmbedding
+          })
+          .eq('id', promotion_id);
+
+        if (updateError) {
+          throw new Error(`Error al actualizar la promoción: ${updateError.message}`);
+        }
+
+        reply = `¡Promoción modificada con éxito!\n\n* **Entidad:** ${updatedEntidad}\n* **Descuento:** ${updatedDescuento}%\n* **Vigencia:** ${updatedDias}\n${updatedTope ? `* **Tope de reintegro:** $${updatedTope}\n` : ''}`;
       }
     } else {
       reply = part?.text || "Lo siento, no pude procesar tu solicitud en este momento.";

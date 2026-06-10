@@ -14,6 +14,7 @@ import {
 import { supabase } from '../../src/utils/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 
 const UNITS = ['unidad', 'kg', 'g', 'litro', 'ml', 'pack'];
 
@@ -74,31 +75,98 @@ export default function ScanScreen() {
     });
   };
 
+  const handleCameraLaunch = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Se requiere acceso a la cámara para tomar una foto del ticket.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.base64) {
+        const asset = result.assets[0];
+        const base64Data = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
+        setImages((prev) => [...prev, base64Data]);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Ocurrió un error al abrir la cámara: ' + error.message);
+    }
+  };
+
+  const handleLibraryLaunch = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Se requiere acceso a la galería para seleccionar la foto del ticket.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets?.[0]?.base64) {
+        const asset = result.assets[0];
+        const base64Data = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
+        setImages((prev) => [...prev, base64Data]);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Ocurrió un error al abrir la galería: ' + error.message);
+    }
+  };
+
   const handlePickImages = () => {
-    if (Platform.OS !== 'web') {
-      Alert.alert('Solo disponible en Web', 'Esta funcionalidad de escaneo por archivo/cámara está optimizada para la versión web.');
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.multiple = true;
+      input.onchange = async (e: any) => {
+        const files = e.target.files;
+        if (files && files.length > 0) {
+          setScanning(true);
+          try {
+            const compressed = await Promise.all(Array.from(files).map((f: any) => compressImage(f)));
+            setImages((prev) => [...prev, ...compressed]);
+          } catch (err) {
+            Alert.alert('Error', 'No se pudieron procesar las imágenes.');
+          } finally {
+            setScanning(false);
+          }
+        }
+      };
+      input.click();
       return;
     }
 
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.multiple = true;
-    input.onchange = async (e: any) => {
-      const files = e.target.files;
-      if (files && files.length > 0) {
-        setScanning(true);
-        try {
-          const compressed = await Promise.all(Array.from(files).map((f: any) => compressImage(f)));
-          setImages((prev) => [...prev, ...compressed]);
-        } catch (err) {
-          Alert.alert('Error', 'No se pudieron procesar las imágenes.');
-        } finally {
-          setScanning(false);
-        }
-      }
-    };
-    input.click();
+    Alert.alert(
+      'Cargar Ticket',
+      'Elige una opción para cargar la imagen de tu ticket',
+      [
+        {
+          text: 'Tomar Foto',
+          onPress: handleCameraLaunch,
+        },
+        {
+          text: 'Seleccionar de la Galería',
+          onPress: handleLibraryLaunch,
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   const handleScan = async () => {
@@ -107,7 +175,8 @@ export default function ScanScreen() {
     setError(null);
 
     try {
-      const response = await fetch('/api/scan-ticket', {
+      const baseUrl = Platform.OS === 'web' ? '' : 'https://personal-finance-eight.vercel.app';
+      const response = await fetch(`${baseUrl}/api/scan-ticket`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ images }),

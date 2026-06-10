@@ -208,6 +208,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    flexShrink: 1,
   },
   userBubble: {
     backgroundColor: '#000000',

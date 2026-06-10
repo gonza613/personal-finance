@@ -28,3 +28,4 @@ web-build/
 *.log
 supabase/.temp/
 .env*
+.vercel
