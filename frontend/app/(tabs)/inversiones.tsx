@@ -278,20 +278,20 @@ export default function InversionesScreen() {
                       key={typeObj.value}
                       style={[
                         styles.typeBadge,
-                        tipo === typeObj.value && { backgroundColor: typeObj.color + '30', borderColor: typeObj.color }
+                        tipo === typeObj.value && { backgroundColor: '#000000', borderColor: '#000000' }
                       ]}
                       onPress={() => setTipo(typeObj.value)}
                     >
                       <Ionicons
                         name={typeObj.icon as any}
                         size={16}
-                        color={tipo === typeObj.value ? typeObj.color : '#64748B'}
+                        color={tipo === typeObj.value ? '#FFFFFF' : '#666666'}
                         style={{ marginRight: 6 }}
                       />
                       <Text
                         style={[
                           styles.typeBadgeText,
-                          tipo === typeObj.value ? { color: '#F8FAFC', fontWeight: '700' } : { color: '#64748B' }
+                          tipo === typeObj.value ? { color: '#FFFFFF', fontWeight: '700' } : { color: '#666666' }
                         ]}
                       >
                         {typeObj.label}
@@ -338,21 +338,22 @@ export default function InversionesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     padding: 20,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
   summaryCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E5E5',
     marginTop: 10,
     marginBottom: 24,
   },
@@ -362,21 +363,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   summaryTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#000000',
     marginLeft: 8,
   },
   summarySubtitle: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: '#666666',
     marginBottom: 16,
     textAlign: 'center',
   },
   addButton: {
     flexDirection: 'row',
-    backgroundColor: '#6366F1',
-    borderRadius: 14,
+    backgroundColor: '#000000',
+    borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 20,
     alignItems: 'center',
@@ -393,27 +394,27 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   listTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#F8FAFC',
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#000000',
   },
   listContent: {
     paddingBottom: 80,
   },
   positionCard: {
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#E5E5E5',
   },
   iconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -422,22 +423,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tickerText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#000000',
     marginBottom: 4,
   },
   platformText: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#666666',
   },
   amountWrapper: {
     alignItems: 'flex-end',
   },
   amountText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: '#000000',
   },
   emptyContainer: {
     flex: 1,
@@ -446,26 +447,26 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   emptyText: {
-    color: '#64748B',
+    color: '#999999',
     marginTop: 12,
     fontSize: 14,
     textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#1E293B',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 40,
     maxHeight: '90%',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E5E5',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -474,9 +475,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#F8FAFC',
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#000000',
   },
   modalBody: {
     paddingBottom: 24,
@@ -485,22 +486,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   inputLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#666666',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   modalInput: {
-    height: 52,
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
+    height: 48,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
     paddingHorizontal: 16,
-    color: '#F8FAFC',
-    fontSize: 16,
+    color: '#000000',
+    fontSize: 15,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E5E5',
   },
   typesGrid: {
     flexDirection: 'column',
@@ -509,15 +510,15 @@ const styles = StyleSheet.create({
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#334155',
-    backgroundColor: '#0F172A',
+    borderColor: '#E5E5E5',
+    backgroundColor: '#F9FAFB',
   },
   typeBadgeText: {
-    fontSize: 14,
+    fontSize: 13,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -527,21 +528,21 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    height: 52,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 8,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
   deleteButton: {
-    backgroundColor: '#EF4444',
+    backgroundColor: '#FF3B30',
   },
   saveButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#000000',
   },
   actionButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
 });

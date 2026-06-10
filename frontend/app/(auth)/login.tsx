@@ -123,7 +123,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A', // Slate 900
+    backgroundColor: '#FFFFFF',
   },
   scrollContainer: {
     flexGrow: 1,
@@ -134,28 +134,23 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: '#1E293B', // Slate 800
-    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
     borderWidth: 1,
-    borderColor: '#334155', // Slate 700
+    borderColor: '#E5E5E5',
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#000000',
     textAlign: 'center',
     marginBottom: 8,
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: '#666666',
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 20,
@@ -165,41 +160,36 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#666666',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
     width: '100%',
-    height: 52,
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
+    height: 48,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
     paddingHorizontal: 16,
-    color: '#F8FAFC',
-    fontSize: 16,
+    color: '#000000',
+    fontSize: 15,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E5E5E5',
   },
   button: {
     width: '100%',
-    height: 52,
-    backgroundColor: '#6366F1', // Indigo 500
-    borderRadius: 12,
+    height: 48,
+    backgroundColor: '#000000',
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 12,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   switchButton: {
@@ -207,8 +197,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   switchText: {
-    color: '#6366F1',
+    color: '#000000',
     fontSize: 14,
     fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
+

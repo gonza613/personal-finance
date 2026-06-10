@@ -1,41 +1,68 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, View } from 'react-native';
+import { Platform } from 'react-native';
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#6366F1', // Indigo 500
-        tabBarInactiveTintColor: '#64748B', // Slate 500
+        tabBarActiveTintColor: '#000000',
+        tabBarInactiveTintColor: '#737373',
         tabBarStyle: {
-          backgroundColor: '#0F172A', // Slate 900
-          borderTopColor: '#1E293B', // Slate 800
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E5E5E5',
           height: Platform.OS === 'ios' ? 88 : 64,
           paddingBottom: Platform.OS === 'ios' ? 28 : 10,
           paddingTop: 10,
         },
         headerStyle: {
-          backgroundColor: '#0F172A',
-          borderBottomColor: '#1E293B',
+          backgroundColor: '#FFFFFF',
+          borderBottomColor: '#E5E5E5',
           borderBottomWidth: 1,
+          elevation: 0,
+          shadowOpacity: 0,
         },
         headerTitleStyle: {
-          color: '#F8FAFC',
-          fontSize: 18,
-          fontWeight: '700',
+          color: '#000000',
+          fontSize: 16,
+          fontWeight: '800',
+          letterSpacing: -0.2,
         },
         headerTitleAlign: 'center',
         tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
       }}
     >
       <Tabs.Screen
         name="dashboard"
         options={{
           title: 'Resumen',
-          tabBarLabel: 'Dashboard',
-          tabBarIcon: ({ color, size }: { color: string; size: number }) => (
-            <Ionicons name="wallet" size={size} color={color} />
+          tabBarLabel: 'Resumen',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="grid-outline" size={20} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="scan"
+        options={{
+          title: 'Escanear Ticket',
+          tabBarLabel: 'Escanear',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="scan-outline" size={20} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="compare"
+        options={{
+          title: 'Comparar Precios',
+          tabBarLabel: 'Comparar',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="pricetag-outline" size={20} color={color} />
           ),
         }}
       />
@@ -44,8 +71,8 @@ export default function TabsLayout() {
         options={{
           title: 'Inversiones',
           tabBarLabel: 'Inversiones',
-          tabBarIcon: ({ color, size }: { color: string; size: number }) => (
-            <Ionicons name="trending-up" size={size} color={color} />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="trending-up-outline" size={20} color={color} />
           ),
         }}
       />
@@ -54,8 +81,8 @@ export default function TabsLayout() {
         options={{
           title: 'Asistente IA',
           tabBarLabel: 'Asistente',
-          tabBarIcon: ({ color, size }: { color: string; size: number }) => (
-            <Ionicons name="chatbubbles" size={size} color={color} />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles-outline" size={20} color={color} />
           ),
         }}
       />
