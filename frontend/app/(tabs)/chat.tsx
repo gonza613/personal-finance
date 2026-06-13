@@ -11,10 +11,12 @@ interface Message {
 }
 
 const QUICK_SUGGESTIONS = [
-  '¿Cuánto gasté en total?',
-  '¿Qué promos tengo en supermercados?',
-  '¿Qué tarjeta me conviene usar hoy?',
-  '¿Puedo comprar una cafetera de $50000?',
+  '¿Cuánto gasté este mes?',
+  '¿Qué promos tengo?',
+  '¿Qué tarjeta me conviene hoy?',
+  'Gasté 5000 en almuerzo',
+  'Modificá mi presupuesto a 300 mil',
+  '¿Cómo vienen mis inversiones?',
 ];
 
 export default function ChatScreen() {
@@ -22,7 +24,7 @@ export default function ChatScreen() {
     {
       id: 'welcome',
       sender: 'ai',
-      text: '¡Hola! Soy tu asistente financiero personal con Inteligencia Artificial. Pregúntame sobre tus gastos del mes o consulta qué promociones bancarias te convienen hoy.',
+      text: '¡Hola! Soy tu asistente financiero personal. Hablame de forma natural: podés registrar gastos, consultar promociones, modificar registros, o preguntarme lo que necesites. ¡Recuerdo toda nuestra conversación! 🧠',
       timestamp: new Date(),
     },
   ]);
@@ -38,6 +40,19 @@ export default function ChatScreen() {
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
+  };
+
+  /**
+   * Construir el historial conversacional para enviar a ai-chat.
+   * Excluye el mensaje de bienvenida y el mensaje actual.
+   */
+  const buildHistory = (): { role: 'user' | 'ai'; text: string }[] => {
+    return messages
+      .filter(m => m.id !== 'welcome')
+      .map(m => ({
+        role: m.sender,
+        text: m.text
+      }));
   };
 
   const handleSend = async (text: string) => {
@@ -56,9 +71,15 @@ export default function ChatScreen() {
     Keyboard.dismiss();
 
     try {
-      // Llamar a la Supabase Edge Function 'ai-chat'
+      // Construir historial ANTES de agregar el mensaje del usuario (ya se agrega arriba)
+      const history = buildHistory();
+
+      // Llamar a la Supabase Edge Function 'ai-chat' con historial
       const { data, error } = await supabase.functions.invoke('ai-chat', {
-        body: { message: userMsg.text },
+        body: {
+          message: userMsg.text,
+          history: history
+        },
       });
 
       if (error) throw error;
@@ -77,13 +98,24 @@ export default function ChatScreen() {
       const errorMsg: Message = {
         id: Date.now().toString() + '-error',
         sender: 'ai',
-        text: `Lo siento, ocurrió un error al comunicarme con el servidor: ${error.message || 'Error desconocido'}.`,
+        text: `Lo siento, ocurrió un error: ${error.message || 'Error desconocido'}.`,
         timestamp: new Date(),
       };
       setMessages((prev: Message[]) => [...prev, errorMsg]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClearChat = () => {
+    setMessages([
+      {
+        id: 'welcome-' + Date.now(),
+        sender: 'ai',
+        text: '¡Conversación reiniciada! ¿En qué te puedo ayudar?',
+        timestamp: new Date(),
+      },
+    ]);
   };
 
   const renderMessageItem = ({ item }: { item: Message }) => {
@@ -110,6 +142,21 @@ export default function ChatScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       style={styles.container}
     >
+      {/* Header con botón de limpiar */}
+      <View style={styles.headerBar}>
+        <View style={styles.headerLeft}>
+          <Ionicons name="chatbubbles" size={18} color="#6366F1" />
+          <Text style={styles.headerTitle}>Asistente IA</Text>
+          <View style={styles.memoryBadge}>
+            <Ionicons name="brain" size={10} color="#6366F1" />
+            <Text style={styles.memoryBadgeText}>Memoria activa</Text>
+          </View>
+        </View>
+        <TouchableOpacity onPress={handleClearChat} style={styles.clearButton}>
+          <Ionicons name="refresh-outline" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      </View>
+
       {/* Mensajes */}
       <FlatList
         ref={flatListRef}
@@ -133,9 +180,9 @@ export default function ChatScreen() {
       />
 
       {/* Sugerencias Rápidas */}
-      {messages.length === 1 && !loading && (
+      {messages.length <= 2 && !loading && (
         <View style={styles.suggestionsContainer}>
-          <Text style={styles.suggestionsTitle}>Sugerencias:</Text>
+          <Text style={styles.suggestionsTitle}>Prueba algo:</Text>
           <View style={styles.suggestionsGrid}>
             {QUICK_SUGGESTIONS.map((suggestion, idx) => (
               <TouchableOpacity
@@ -154,7 +201,7 @@ export default function ChatScreen() {
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
-          placeholder="Escribe tu mensaje aquí..."
+          placeholder="Hablame naturalmente..."
           placeholderTextColor="#64748B"
           value={inputText}
           onChangeText={setInputText}
@@ -174,6 +221,44 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  headerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  memoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+  },
+  memoryBadgeText: {
+    fontSize: 10,
+    color: '#6366F1',
+    fontWeight: '600',
+  },
+  clearButton: {
+    padding: 6,
   },
   chatList: {
     padding: 16,

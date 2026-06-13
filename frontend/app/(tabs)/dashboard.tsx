@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity, Modal, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TextInput, TouchableOpacity, Modal, ActivityIndicator, Alert, ScrollView, Animated } from 'react-native';
 import { supabase } from '../../src/utils/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -28,18 +28,68 @@ export default function DashboardScreen() {
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [monthlyExpenses, setMonthlyExpenses] = useState(0);
   const [dailyExpenses, setDailyExpenses] = useState<{ day: string; amount: number }[]>([]);
+  const [monthlyTrend, setMonthlyTrend] = useState<{ month: string; amount: number }[]>([]);
   const [categoryBreakdown, setCategoryBreakdown] = useState<{ category: string; amount: number; percentage: number; color: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [budgetModalVisible, setBudgetModalVisible] = useState(false);
+
+  // Form fields (shared for create/edit)
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('Otros');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Budget
+  const [budget, setBudget] = useState(200000);
+  const [budgetInput, setBudgetInput] = useState('');
+
   const router = useRouter();
 
   useEffect(() => {
     fetchExpenses();
+    fetchBudget();
   }, []);
+
+  const fetchBudget = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('budget')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (data?.budget) {
+        setBudget(Number(data.budget));
+      }
+    } catch (err) {
+      console.log('Error fetching budget:', err);
+    }
+  };
+
+  const handleSaveBudget = async () => {
+    const val = Number(budgetInput);
+    if (!val || val <= 0) {
+      Alert.alert('Error', 'Ingresá un monto válido para el presupuesto.');
+      return;
+    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ budget: val })
+        .eq('id', user.id);
+      if (error) throw error;
+      setBudget(val);
+      setBudgetModalVisible(false);
+      Alert.alert('Éxito', `Presupuesto actualizado a $${val.toLocaleString('es-AR')}`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo actualizar el presupuesto.');
+    }
+  };
 
   const computeStats = (data: Gasto[]) => {
     const now = new Date();
@@ -49,6 +99,7 @@ export default function DashboardScreen() {
     let monthlyTotal = 0;
     const catMap: Record<string, number> = {};
     const dailyMap: Record<string, number> = {};
+    const trendMap: Record<string, number> = {};
     
     // Inicializar los últimos 7 días con 0
     for (let i = 6; i >= 0; i--) {
@@ -56,6 +107,13 @@ export default function DashboardScreen() {
       d.setDate(now.getDate() - i);
       const key = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
       dailyMap[key] = 0;
+    }
+
+    // Inicializar los últimos 6 meses con 0
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(currentYear, currentMonth - i, 1);
+      const key = d.toLocaleDateString('es-AR', { month: 'short' }).replace('.', '');
+      trendMap[key] = 0;
     }
 
     data.forEach(item => {
@@ -72,9 +130,15 @@ export default function DashboardScreen() {
       }
 
       // Sumar a los últimos 7 días si cae en la ventana
-      const key = itemDate.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
-      if (dailyMap[key] !== undefined) {
-        dailyMap[key] += amountVal;
+      const dayKey = itemDate.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+      if (dailyMap[dayKey] !== undefined) {
+        dailyMap[dayKey] += amountVal;
+      }
+
+      // Sumar a tendencia mensual (últimos 6 meses)
+      const monthKey = itemDate.toLocaleDateString('es-AR', { month: 'short' }).replace('.', '');
+      if (trendMap[monthKey] !== undefined) {
+        trendMap[monthKey] += amountVal;
       }
     });
 
@@ -86,6 +150,13 @@ export default function DashboardScreen() {
       amount: dailyMap[day]
     }));
     setDailyExpenses(formattedDaily);
+
+    // Formatear tendencia mensual
+    const formattedTrend = Object.keys(trendMap).map(month => ({
+      month,
+      amount: trendMap[month]
+    }));
+    setMonthlyTrend(formattedTrend);
 
     // Formatear distribución por categorías ordenadas por monto descendente
     const formattedCat = Object.keys(catMap).map(catName => {
@@ -130,7 +201,23 @@ export default function DashboardScreen() {
     }
   };
 
-  const handleAddExpense = async () => {
+  const handleOpenAddModal = () => {
+    setEditingId(null);
+    setAmount('');
+    setCategory('Otros');
+    setDescription('');
+    setModalVisible(true);
+  };
+
+  const handleOpenEditModal = (item: Gasto) => {
+    setEditingId(item.id);
+    setAmount(String(item.monto));
+    setCategory(item.categoria);
+    setDescription(item.descripcion || '');
+    setModalVisible(true);
+  };
+
+  const handleSaveExpense = async () => {
     if (!amount || isNaN(Number(amount))) {
       Alert.alert('Error', 'Por favor ingresa un monto válido.');
       return;
@@ -141,7 +228,7 @@ export default function DashboardScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Generar embedding del gasto si está la API Key de Gemini
+      // Generar embedding del gasto
       let embedding: number[] | null = null;
       // @ts-ignore
       const geminiApiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
@@ -166,23 +253,40 @@ export default function DashboardScreen() {
             embedding = embedData.embedding.values;
           }
         } catch (err) {
-          console.log("No se pudo generar el embedding, se guardará el gasto sin él.", err);
+          console.log("No se pudo generar el embedding, se guardará sin él.", err);
         }
       }
 
-      const { error } = await supabase.from('gastos').insert({
-        user_id: user.id,
-        monto: Number(amount),
-        categoria: category,
-        descripcion: description,
-        embedding,
-      });
+      if (editingId) {
+        // Actualizar existente
+        const payload: Record<string, any> = {
+          monto: Number(amount),
+          categoria: category,
+          descripcion: description,
+        };
+        if (embedding) payload.embedding = embedding;
 
-      if (error) throw error;
+        const { error } = await supabase
+          .from('gastos')
+          .update(payload)
+          .eq('id', editingId);
+        if (error) throw error;
+      } else {
+        // Crear nuevo
+        const { error } = await supabase.from('gastos').insert({
+          user_id: user.id,
+          monto: Number(amount),
+          categoria: category,
+          descripcion: description,
+          embedding,
+        });
+        if (error) throw error;
+      }
 
       setAmount('');
       setDescription('');
       setCategory('Otros');
+      setEditingId(null);
       setModalVisible(false);
       fetchExpenses();
     } catch (error: any) {
@@ -190,6 +294,38 @@ export default function DashboardScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!editingId) return;
+    Alert.alert(
+      'Confirmar Eliminación',
+      '¿Estás seguro de que deseas eliminar este gasto?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              const { error } = await supabase
+                .from('gastos')
+                .delete()
+                .eq('id', editingId);
+              if (error) throw error;
+              setModalVisible(false);
+              setEditingId(null);
+              fetchExpenses();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'No se pudo eliminar el gasto.');
+            } finally {
+              setSaving(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleLogout = async () => {
@@ -209,7 +345,7 @@ export default function DashboardScreen() {
     });
 
     return (
-      <View style={styles.expenseItem}>
+      <TouchableOpacity style={styles.expenseItem} onPress={() => handleOpenEditModal(item)} activeOpacity={0.7}>
         <View style={[styles.iconWrapper, { backgroundColor: details.color + '15' }]}>
           <Ionicons name={details.icon as any} size={22} color={details.color} />
         </View>
@@ -217,10 +353,15 @@ export default function DashboardScreen() {
           <Text style={styles.expenseDesc}>{item.descripcion || item.categoria}</Text>
           <Text style={styles.expenseMeta}>{item.categoria} • {formattedDate}</Text>
         </View>
-        <Text style={styles.expenseAmount}>${Number(item.monto).toLocaleString('es-AR')}</Text>
-      </View>
+        <View style={styles.expenseRight}>
+          <Text style={styles.expenseAmount}>${Number(item.monto).toLocaleString('es-AR')}</Text>
+          <Ionicons name="chevron-forward" size={14} color="#CCCCCC" />
+        </View>
+      </TouchableOpacity>
     );
   };
+
+  const budgetPct = budget > 0 ? (monthlyExpenses / budget) * 100 : 0;
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
@@ -229,12 +370,18 @@ export default function DashboardScreen() {
         <Text style={styles.balanceLabel}>Gastado este mes</Text>
         <Text style={styles.balanceAmount}>${monthlyExpenses.toLocaleString('es-AR')}</Text>
         
-        {/* Barra de progreso de presupuesto mensual ($200.000 ARS por defecto) */}
-        <View style={styles.budgetProgressContainer}>
+        {/* Barra de progreso de presupuesto */}
+        <TouchableOpacity style={styles.budgetProgressContainer} onPress={() => {
+          setBudgetInput(String(budget));
+          setBudgetModalVisible(true);
+        }} activeOpacity={0.8}>
           <View style={styles.budgetRow}>
-            <Text style={styles.budgetText}>Presupuesto mensual: $200.000</Text>
             <Text style={styles.budgetText}>
-              {((monthlyExpenses / 200000) * 100).toFixed(0)}%
+              Presupuesto: ${budget.toLocaleString('es-AR')}
+              <Text style={styles.budgetEditHint}> ✎</Text>
+            </Text>
+            <Text style={[styles.budgetText, budgetPct >= 100 ? styles.budgetOverText : null]}>
+              {budgetPct.toFixed(0)}%
             </Text>
           </View>
           <View style={styles.progressBarBg}>
@@ -242,19 +389,32 @@ export default function DashboardScreen() {
               style={[
                 styles.progressBarFill, 
                 { 
-                  width: `${Math.min((monthlyExpenses / 200000) * 100, 100)}%`,
-                  backgroundColor: monthlyExpenses > 200000 ? '#EF4444' : '#10B981'
+                  width: `${Math.min(budgetPct, 100)}%`,
+                  backgroundColor: budgetPct >= 100 ? '#EF4444' : budgetPct >= 80 ? '#F59E0B' : '#10B981'
                 }
               ]} 
             />
           </View>
-        </View>
+        </TouchableOpacity>
+
+        {budgetPct >= 100 && (
+          <View style={styles.alertBanner}>
+            <Ionicons name="warning" size={14} color="#EF4444" />
+            <Text style={styles.alertText}>¡Superaste tu presupuesto mensual!</Text>
+          </View>
+        )}
+        {budgetPct >= 80 && budgetPct < 100 && (
+          <View style={[styles.alertBanner, styles.alertWarning]}>
+            <Ionicons name="alert-circle" size={14} color="#F59E0B" />
+            <Text style={[styles.alertText, styles.alertWarningText]}>Estás al {budgetPct.toFixed(0)}% de tu presupuesto</Text>
+          </View>
+        )}
 
         <Text style={styles.historicLabel}>
           Total acumulado histórico: ${totalExpenses.toLocaleString('es-AR')}
         </Text>
 
-        <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)}>
+        <TouchableOpacity style={styles.addButton} onPress={handleOpenAddModal}>
           <Ionicons name="add" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
           <Text style={styles.addButtonText}>Agregar Gasto</Text>
         </TouchableOpacity>
@@ -267,7 +427,6 @@ export default function DashboardScreen() {
           {dailyExpenses.map((item, index) => {
             const maxAmount = Math.max(...dailyExpenses.map(d => d.amount), 1);
             const heightPercentage = (item.amount / maxAmount) * 100;
-            // Altura máxima del gráfico es 80px, mínimo 0
             const barHeight = item.amount > 0 ? Math.max((heightPercentage / 100) * 80, 6) : 0;
 
             return (
@@ -294,6 +453,58 @@ export default function DashboardScreen() {
           })}
         </View>
       </View>
+
+      {/* Gráfico de Tendencia Mensual (Últimos 6 meses) */}
+      {monthlyTrend.some(m => m.amount > 0) && (
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>Tendencia mensual (últimos 6 meses)</Text>
+          <View style={styles.barChartContainer}>
+            {monthlyTrend.map((item, index) => {
+              const maxAmount = Math.max(...monthlyTrend.map(d => d.amount), 1);
+              const heightPercentage = (item.amount / maxAmount) * 100;
+              const barHeight = item.amount > 0 ? Math.max((heightPercentage / 100) * 80, 6) : 0;
+
+              return (
+                <View key={index} style={styles.barColumn}>
+                  <View style={styles.barWrapper}>
+                    {item.amount > 0 && (
+                      <Text style={styles.barValueText}>
+                        ${item.amount >= 1000000 
+                          ? `${(item.amount / 1000000).toFixed(1)}M` 
+                          : item.amount >= 1000 
+                            ? `${(item.amount / 1000).toFixed(0)}k` 
+                            : Math.round(item.amount)}
+                      </Text>
+                    )}
+                    <View 
+                      style={[
+                        styles.barFill, 
+                        { 
+                          height: barHeight,
+                          backgroundColor: item.amount > 0 ? '#10B981' : '#334155',
+                          borderRadius: 4,
+                        }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={styles.barLabel}>{item.month}</Text>
+                </View>
+              );
+            })}
+          </View>
+          {/* Predicción del mes */}
+          {monthlyExpenses > 0 && (
+            <View style={styles.predictionBox}>
+              <Ionicons name="trending-up" size={14} color="#6366F1" />
+              <Text style={styles.predictionText}>
+                A este ritmo, gastarás ~${Math.round(
+                  monthlyExpenses / Math.max(new Date().getDate(), 1) * new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+                ).toLocaleString('es-AR')} este mes
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Distribución por Categorías */}
       {categoryBreakdown.length > 0 && (
@@ -370,7 +581,7 @@ export default function DashboardScreen() {
         <Text style={styles.logoutText}>Salir</Text>
       </TouchableOpacity>
 
-      {/* Modal Agregar Gasto */}
+      {/* Modal Crear/Editar Gasto */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -380,8 +591,8 @@ export default function DashboardScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nuevo Gasto</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalTitle}>{editingId ? 'Editar Gasto' : 'Nuevo Gasto'}</Text>
+              <TouchableOpacity onPress={() => { setModalVisible(false); setEditingId(null); }}>
                 <Ionicons name="close" size={24} color="#94A3B8" />
               </TouchableOpacity>
             </View>
@@ -441,18 +652,63 @@ export default function DashboardScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={styles.modalSubmitButton}
-                onPress={handleAddExpense}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.modalSubmitText}>Guardar Gasto</Text>
+              <View style={styles.buttonRow}>
+                {editingId && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={handleDeleteExpense}
+                    disabled={saving}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.actionButtonText}>Eliminar</Text>
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSubmitButton, !editingId && { width: '100%' }]}
+                  onPress={handleSaveExpense}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>{editingId ? 'Guardar Cambios' : 'Guardar Gasto'}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Configurar Presupuesto */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={budgetModalVisible}
+        onRequestClose={() => setBudgetModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: 300 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Configurar Presupuesto</Text>
+              <TouchableOpacity onPress={() => setBudgetModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Presupuesto mensual ($)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="200000"
+                placeholderTextColor="#64748B"
+                keyboardType="numeric"
+                value={budgetInput}
+                onChangeText={setBudgetInput}
+              />
+            </View>
+            <TouchableOpacity style={styles.modalSubmitButton} onPress={handleSaveBudget}>
+              <Text style={styles.modalSubmitText}>Guardar Presupuesto</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -503,7 +759,7 @@ const styles = StyleSheet.create({
   },
   budgetProgressContainer: {
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   budgetRow: {
     flexDirection: 'row',
@@ -514,6 +770,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666666',
     fontWeight: '600',
+  },
+  budgetEditHint: {
+    fontSize: 11,
+    color: '#999999',
+  },
+  budgetOverText: {
+    color: '#EF4444',
+    fontWeight: '800',
+  },
+  alertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    padding: 8,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    width: '100%',
+  },
+  alertWarning: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  alertText: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  alertWarningText: {
+    color: '#D97706',
   },
   progressBarBg: {
     height: 6,
@@ -593,6 +882,22 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontWeight: '600',
   },
+  predictionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+  },
+  predictionText: {
+    fontSize: 12,
+    color: '#4F46E5',
+    fontWeight: '600',
+    marginLeft: 6,
+  },
   categoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -669,6 +974,11 @@ const styles = StyleSheet.create({
   expenseMeta: {
     fontSize: 12,
     color: '#666666',
+  },
+  expenseRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   expenseAmount: {
     fontSize: 15,
@@ -776,7 +1086,30 @@ const styles = StyleSheet.create({
   categoryBadgeText: {
     fontSize: 12,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    backgroundColor: '#FF3B30',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
   modalSubmitButton: {
+    flex: 1,
     height: 48,
     backgroundColor: '#000000',
     borderRadius: 8,
@@ -790,4 +1123,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-

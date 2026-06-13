@@ -47,22 +47,22 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="scan"
+        name="compras"
         options={{
-          title: 'Escanear Ticket',
-          tabBarLabel: 'Escanear',
+          title: 'Compras',
+          tabBarLabel: 'Compras',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="scan-outline" size={20} color={color} />
+            <Ionicons name="cart-outline" size={20} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="compare"
+        name="promos"
         options={{
-          title: 'Comparar Precios',
-          tabBarLabel: 'Comparar',
+          title: 'Promociones',
+          tabBarLabel: 'Promos',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pricetag-outline" size={20} color={color} />
+            <Ionicons name="pricetags-outline" size={20} color={color} />
           ),
         }}
       />
@@ -84,6 +84,19 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubbles-outline" size={20} color={color} />
           ),
+        }}
+      />
+      {/* Ocultar las páginas viejas que ya no se usan */}
+      <Tabs.Screen
+        name="scan"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="compare"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

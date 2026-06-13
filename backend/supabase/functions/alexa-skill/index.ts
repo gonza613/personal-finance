@@ -11,6 +11,7 @@ interface AlexaRequest {
     new: boolean;
     sessionId: string;
     application: { applicationId: string };
+    attributes?: Record<string, any>;
     user: {
       userId: string;
       accessToken?: string;
@@ -37,6 +38,11 @@ interface AlexaRequest {
   };
 }
 
+interface ConversationMessage {
+  role: 'user' | 'ai';
+  text: string;
+}
+
 /**
  * Limpia el formato Markdown para que Alexa pueda leer el texto de forma natural
  * sin deletrear asteriscos, guiones o barras de tablas.
@@ -44,6 +50,8 @@ interface AlexaRequest {
 function cleanMarkdownForVoice(text: string): string {
   if (!text) return "";
   return text
+    // Eliminar emojis de alerta que Alexa deletrea
+    .replace(/[⚠️🚨🔔✅❌💡📊📈📉🏷️🔄💰]/gu, "")
     // Reemplazar viñetas por pausas breves (comas) primero para evitar conflictos con asteriscos de formato
     .replace(/^\s*[-*+]\s+/gm, ", ")
     // Eliminar negritas y cursivas (e.g., **texto**, *texto*, __texto__, _texto_)
@@ -85,8 +93,17 @@ serve(async (req) => {
     const session = alexaReq.session;
     const accessToken = session?.user?.accessToken;
 
-    // Estructura base de la respuesta de Alexa
-    const buildAlexaResponse = (speechText: string, shouldEndSession: boolean, requireAccountLinking = false) => {
+    // Recuperar el historial conversacional de los atributos de sesión
+    const sessionAttributes = session?.attributes || {};
+    const conversationHistory: ConversationMessage[] = sessionAttributes.conversationHistory || [];
+
+    // Estructura base de la respuesta de Alexa (sesión abierta por defecto para conversación fluida)
+    const buildAlexaResponse = (
+      speechText: string,
+      shouldEndSession: boolean,
+      requireAccountLinking = false,
+      updatedHistory?: ConversationMessage[]
+    ) => {
       const response: Record<string, any> = {
         outputSpeech: {
           type: "PlainText",
@@ -106,13 +123,20 @@ serve(async (req) => {
         response.reprompt = {
           outputSpeech: {
             type: "PlainText",
-            text: "¿Sigues ahí? Dime qué te gustaría hacer, como por ejemplo: cuánto gasté hoy."
+            text: "¿Algo más? Puedes decirme qué gastaste, preguntarme sobre tus finanzas, o decir 'salir' para terminar."
           }
         };
       }
 
+      // Persistir el historial conversacional en los atributos de sesión de Alexa
+      const newSessionAttributes: Record<string, any> = {
+        ...sessionAttributes,
+        conversationHistory: updatedHistory || conversationHistory
+      };
+
       return new Response(JSON.stringify({
         version: "1.0",
+        sessionAttributes: newSessionAttributes,
         response
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -140,29 +164,29 @@ serve(async (req) => {
     // 3. Manejo de LaunchRequest (Cuando el usuario dice "Alexa, abre mis finanzas")
     if (requestType === "LaunchRequest") {
       return buildAlexaResponse(
-        "Hola, bienvenido a tus Finanzas Personales. ¿Qué te gustaría consultar o registrar hoy?",
-        false
+        "¡Hola! Estoy lista para ayudarte con tus finanzas. Puedes decirme cosas como: 'gasté 5 mil en comida', 'cuánto llevo este mes', o 'qué promos tengo'. ¿Qué necesitás?",
+        false // Mantener sesión abierta
       );
     }
 
-    // 4. Manejo de IntentRequest (Comandos de voz del usuario)
+    // 4. Manejo de IntentRequest
     if (requestType === "IntentRequest") {
       const intentName = alexaReq.request.intent?.name;
       console.log("Intent Name:", intentName);
 
       // Intents estándares de cancelación y ayuda
       if (intentName === "AMAZON.CancelIntent" || intentName === "AMAZON.StopIntent") {
-        return buildAlexaResponse("Entendido. ¡Hasta luego!", true);
+        return buildAlexaResponse("¡Hasta luego! Cuando necesites, decime 'Alexa, abre mis finanzas'.", true);
       }
 
       if (intentName === "AMAZON.HelpIntent") {
         return buildAlexaResponse(
-          "Puedes consultarme sobre tus finanzas. Por ejemplo: cuánto gasté hoy en comida, qué promociones tengo para el banco Galicia, o qué inversiones poseo. ¿Qué quieres hacer?",
+          "Podés hablarme de forma natural. Por ejemplo: 'gasté 3 mil en nafta', 'cuánto gasté esta semana en comida', 'registrá una promo del Galicia con 20% de descuento los lunes', o 'modificá el último gasto a 5 mil'. ¿Qué querés hacer?",
           false
         );
       }
 
-      // Extraer el texto de la consulta del slot del Intent
+      // Extraer el texto de la consulta del slot del intent
       let queryText = "";
       const slots = alexaReq.request.intent?.slots;
       if (slots) {
@@ -170,28 +194,29 @@ serve(async (req) => {
         const querySlot = slots.query || Object.values(slots).find(s => s.value !== undefined);
         if (querySlot?.value) {
           queryText = querySlot.value;
-          
-          // Prevenir que Alexa NLU elimine los verbos de acción al hacer match de slots
-          if (intentName === "DeleteFinanceIntent") {
-            queryText = `borrar ${queryText}`;
-          } else if (intentName === "InsertFinanceIntent") {
-            queryText = `registrar ${queryText}`;
-          } else if (intentName === "QueryFinanceIntent") {
-            queryText = `consultar ${queryText}`;
-          }
+        }
+      }
+
+      // Para el FallbackIntent, usar un mensaje genérico
+      if (intentName === "AMAZON.FallbackIntent") {
+        if (!queryText) {
+          return buildAlexaResponse(
+            "No logré entenderte bien. Puedes decirme cosas como 'gasté 2 mil en transporte' o 'cuánto llevo este mes'. ¿Qué necesitás?",
+            false
+          );
         }
       }
 
       if (!queryText) {
         return buildAlexaResponse(
-          "No logré comprender la consulta. ¿Podrías repetir qué te gustaría consultar o registrar?",
+          "No logré captar lo que dijiste. Podés decirme naturalmente qué gastaste, consultar tus finanzas o pedir que modifique algo. ¿Qué necesitás?",
           false
         );
       }
 
-      console.log(`Enviando consulta a ai-chat: "${queryText}"`);
+      console.log(`Enviando consulta a ai-chat: "${queryText}" con ${conversationHistory.length} mensajes de historial`);
 
-      // 5. Llamar a la Edge Function `ai-chat` pasándole la frase del usuario y el JWT en la cabecera Authorization
+      // 5. Llamar a la Edge Function `ai-chat` con historial conversacional
       const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
       const aiChatUrl = `${supabaseUrl}/functions/v1/ai-chat`;
 
@@ -202,7 +227,10 @@ serve(async (req) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`
           },
-          body: JSON.stringify({ message: queryText })
+          body: JSON.stringify({
+            message: queryText,
+            history: conversationHistory // Enviar historial para memoria conversacional
+          })
         });
 
         if (!aiResponse.ok) {
@@ -216,19 +244,27 @@ serve(async (req) => {
         const speechReply = cleanMarkdownForVoice(rawReply);
         console.log("Respuesta procesada para voz:", speechReply);
 
-        return buildAlexaResponse(speechReply, true);
+        // Actualizar historial conversacional con este intercambio
+        const updatedHistory: ConversationMessage[] = [
+          ...conversationHistory,
+          { role: 'user', text: queryText },
+          { role: 'ai', text: rawReply }
+        ].slice(-10); // Mantener máximo los últimos 10 mensajes
+
+        // Mantener la sesión ABIERTA para que el usuario pueda seguir hablando
+        return buildAlexaResponse(speechReply, false, false, updatedHistory);
 
       } catch (err) {
         console.error("Error al comunicarse con ai-chat:", err);
         return buildAlexaResponse(
-          "Lo siento, en este momento experimenté un inconveniente al conectar con tu cuenta de finanzas. Por favor, vuelve a intentarlo en unos instantes.",
-          true
+          "Lo siento, tuve un problema al conectar con tu cuenta de finanzas. Intentá de nuevo en unos segundos.",
+          false // Mantener sesión abierta para reintentar
         );
       }
     }
 
     // Fallback para otros tipos de peticiones no soportados
-    return buildAlexaResponse("Lo siento, esa acción no está soportada.", true);
+    return buildAlexaResponse("Lo siento, esa acción no está soportada.", false);
 
   } catch (error: any) {
     console.error("Error en la Edge Function de Alexa:", error);
