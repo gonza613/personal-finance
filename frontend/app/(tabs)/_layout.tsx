@@ -96,7 +96,11 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="compare"
         options={{
-          href: null,
+          title: 'Comparar Precios',
+          tabBarLabel: 'Comparar',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="git-compare-outline" size={20} color={color} />
+          ),
         }}
       />
     </Tabs>

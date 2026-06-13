@@ -51,42 +51,44 @@ export default function CompareScreen() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('ticket_items')
+        .from('ticket_detalles')
         .select(`
-          id, product_name, brand, quantity, unit, unit_price, total_price,
+          id, producto, precio, cantidad,
           tickets!inner(
-            purchase_date,
-            supermarkets!inner(name)
+            fecha,
+            comercio
           )
         `)
-        .ilike('product_name', `%${cleanTerm}%`);
+        .ilike('producto', `%${cleanTerm}%`);
 
       if (error) throw error;
 
-      // Group by normalized name and brand
+      // Group by normalized name
       const groups: Record<string, ProductGroup> = {};
 
       (data || []).forEach((item: any) => {
-        const prodName = item.product_name || '';
-        const brandName = item.brand || '';
-        const key = `${prodName.trim().toLowerCase()} (${brandName.trim().toLowerCase() || 'sin marca'})`;
+        const prodName = item.producto || '';
+        const key = prodName.trim().toLowerCase();
 
         if (!groups[key]) {
           groups[key] = {
             productName: prodName,
-            brand: item.brand || 'Sin marca',
-            unit: item.unit || 'unidad',
+            brand: 'Sin marca',
+            unit: 'unidad',
             prices: [],
             cheapest: {} as any
           };
         }
 
+        const unitPrice = Number(item.precio) || 0;
+        const qty = Number(item.cantidad) || 1;
+
         groups[key].prices.push({
-          supermarket: item.tickets.supermarkets.name,
-          unitPrice: Number(item.unit_price) || 0,
-          totalPrice: Number(item.total_price) || 0,
-          quantity: Number(item.quantity) || 1,
-          date: item.tickets.purchase_date,
+          supermarket: item.tickets.comercio,
+          unitPrice: unitPrice,
+          totalPrice: unitPrice * qty,
+          quantity: qty,
+          date: item.tickets.fecha,
         });
       });
 
